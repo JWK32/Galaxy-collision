@@ -61,10 +61,10 @@ def solveeqn(initconds, time):
     dynamicalvars = scipy.integrate.odeint(derivatives, initconds, time, mxstep=1000000, args=(numbodies,))
     return np.array(dynamicalvars)
 
-
-t = np.array(np.linspace(0, 100, 1500))
+tmax = 1500
+t = np.array(np.linspace(0, 100, tmax))
 numstars = 1000
-masses = [40, 100]
+masses = [60, 150]
 direction = [1, 0]
 i = numstars + 2
 j = 2
@@ -73,10 +73,10 @@ h = 1
 print('number of stars per galaxy is ', numstars)
 
 
-centerinitialposn1 = np.array([-30, 10, 0])
-centerinitialposn2 = np.array([30, -10, 0])
-centerinitialvel1 = np.array([3, 0, 0])
-centerinitialvel2 = np.array([-3, 0, 0])
+centerinitialposn1 = np.array([-30, -12, 0])
+centerinitialposn2 = np.array([30, 12, 0])
+centerinitialvel1 = np.array([7, 0, 0])
+centerinitialvel2 = np.array([-7, 0, 0])
 
 # Calculate the initial positions necessary for test masses to execute circular orbits
 
@@ -132,7 +132,6 @@ galaxynormaldist = np.random.normal(0, h, (k*len(t)*i*2))
 
 data1 = np.reshape(np.ravel(galaxy1a), (len(t), i * 2, 3))
 data2 = np.reshape(np.ravel(galaxy2a), (len(t), i * 2, 3))
-datanormal = np.reshape(np.ravel(galaxynormaldist), (len(t), i*2, 3))
 
 # Create 2D animation
 
@@ -173,8 +172,6 @@ def animate(frame):
 
 ani = animation.FuncAnimation(fig, animate, len(t),
                               interval=3, blit=True, init_func=init)
-
-plt.show()
 
 # Create 3D animation
 
@@ -228,6 +225,138 @@ center1, = ax.plot([], [], [], linestyle="", marker=",", color='r')
 center2, = ax.plot([], [], [], linestyle="", marker=",", color='r')
 
 ani2 = animation.FuncAnimation(fig, update_graph, len(t), interval=3, blit=True)
-plt.show()
+
+########################## Analyse final data #################################
+
+# Rearrange data into more manageable format- store position and velocity data separately for each galaxy.
+
+positionswithtime1 = data1[:, :2+numstars, :]
+positionswithtime2 = data2[:, :2+numstars, :]
+velocitieswithtime1 = data1[:, :2+numstars, :]
+velocitieswithtime2 = data2[:, :2+numstars, :]
+
+# Function to pick out position coordinates of a given particle for all time steps.
+
+def massposition(positiondata, massindex):
+    posn = np.array([])
+    if massindex >= 2 + numstars:
+        print('choose mass in appropriate range')
+    else: posn = positiondata[:, massindex, :]
+    return posn
+
+# Function to pick out velocity of a given particle for all time steps.
+
+def massvelocity(velocitydata, massindex):
+    velty = np.array([])
+    if massindex >= 2 + numstars:
+        print('choose mass in appropriate range')
+    else: velty = velocitydata[:, massindex, :]
+    return velty
+
+# Function to find the positions of the masses relative to a central mass. blackholeindex may be 0 or 1.
+
+def relativepositions(simulationpositiondata, blackholeindex):
+   relposns = simulationpositiondata - np.reshape(np.ravel(np.tile(massposition(simulationpositiondata, blackholeindex),
+                                                                   numstars + 2)), (tmax, numstars + 2, 3))
+   return relposns
 
 
+# Function to find 3D distance between all test masses and a given black hole for all time steps.
+
+def relativeradii3d(simulationpositiondata, blackholeindex):
+    coorddifference = relativepositions(simulationpositiondata, blackholeindex)
+    distances = np.zeros((tmax, numstars + 2))
+    for time in range(tmax):
+        for star in range(numstars + 2):
+            distances[time, star] = (coorddifference[time, star, 0]**2 + coorddifference[time, star, 1]**2
+                                     + coorddifference[time, star, 2]**2)**0.5
+    return distances
+
+# Function to find 2D distance (in xy-plane) between all test masses and a given black hole for all time steps.
+
+def relativeradii2d(simulationpositiondata, blackholeindex):
+    coorddifference = relativepositions(simulationpositiondata, blackholeindex)
+    distances = np.zeros((tmax, numstars + 2))
+    for time in range(tmax):
+        for star in range(numstars + 2):
+            distances[time, star] = (coorddifference[time, star, 0]**2 + coorddifference[time, star, 1]**2)**0.5
+    return distances
+
+# Function to find azimuthal angle between all test masses and a given black hole for all time steps.
+
+def azimuthalangle(simulationpositiondata, blackholeindex):
+    coorddifference = relativepositions(simulationpositiondata, blackholeindex)
+    angles = np.zeros((tmax, numstars + 2))
+    for time in range(tmax):
+        for star in range(numstars + 2):
+            angles[time, star] = np.arctan(coorddifference[time, star, 1] / (coorddifference[time, star, 0]+0.1))
+    return angles
+
+# Function to plot 2d radial distribution of given galaxy at timestep t
+
+def radialdistributionplot(testmassdata, blackholeindex, time):
+    histogram = plt.figure()
+    ax = histogram.add_subplot(111)
+    ax.set_xlabel('Radius/Arbitrary units')
+    ax.set_ylabel('Frequency')
+    plt.title('Radial distribution of stars at time t = ', time)
+    plt.ticklabel_format(axis='both', style='plain')
+    plt.hist(relativeradii2d(testmassdata, blackholeindex)[time], 100)
+    plt.show()
+    return
+
+# Function to plot angular distribution of stars in given galaxy at timestep t
+
+def angulardistributionplot(testmassdata, blackholeindex, time):
+    histogram = plt.figure()
+    ax = histogram.add_subplot(111)
+    ax.set_xlabel('Azimuthal angle/rad')
+    ax.set_ylabel('Frequency')
+    plt.title('Angular distribution of stars at time t = ', time)
+    plt.ticklabel_format(axis='both', style='plain')
+    plt.hist(azimuthalangle(testmassdata, blackholeindex)[time], 100)
+    plt.show()
+    return
+
+# Function to plot 2D histogram showing angular distribution against radial distribution
+
+def radialangularplot(testmassdata, blackholeindex, time):
+    plot = plt.figure()
+    ax = plot.add_subplot(111)
+    ax.set_xlabel('Azimuthal angle/rad')
+    ax.set_ylabel('Radius/arbitrary units')
+    plt.title('Radial distribution against angular distribution of stars at time t = ', time)
+    plt.ticklabel_format(axis='both', style='plain')
+    plt.hist2d(azimuthalangle(testmassdata, blackholeindex)[time],
+               relativeradii2d(testmassdata, blackholeindex)[time], 200)
+    plt.show()
+    return
+
+# Function to count how many masses are within a given radius R at a time t
+
+def countmasses(testmassdata, blackholeindex, R):
+    radiiwitht = relativeradii2d(testmassdata, blackholeindex)
+    count = np.zeros(tmax)
+    for h in range(tmax):
+        for w in range(numstars + 2):
+            if radiiwitht[h][w] > R:
+                count[h] +=1
+    return count
+
+# Function to plot how many stars are within a radius R as a function of time
+
+def starswithinR(testmassdata, blackholeindex, R):
+    plot = plt.figure()
+    ax = plot.add_subplot(111)
+    ax.set_xlabel('Time/arbitrary units')
+    ax.set_ylabel('Number of stars within radius R')
+    plt.title('Number of stars within radius R of Black Hole with time')
+    plt.ticklabel_format(axis='both', style='plain')
+    for counter in R:
+        plt.plot(t, countmasses(testmassdata, blackholeindex, counter))
+    plt.legend()
+    plt.show()
+    return
+
+radialangularplot(positionswithtime1, 0, 1000)
+starswithinR(positionswithtime1, 0, [20, 25, 30, 50])
